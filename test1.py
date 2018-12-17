@@ -1,28 +1,44 @@
 import requests
+from requests.exceptions import (
+  ConnectionError,
+  ChunkedEncodingError,
+)
 
 from datetime import datetime
 
+import pandas
 from pandas import DataFrame
 
 from idxstock_util import (
   crawler,
   util
 )
+import time
 
 all_link = crawler.get_all_downloadable_link()
 
 dataframes = []
 
 for link in all_link:
-  response = requests.get(link)
+  while True:
+    try:
+      print(link)
+      response = requests.get(link, headers={'User-Agent': "Hei Tayo"})
+      break
+    except (ChunkedEncodingError, ConnectionError) as e:
+      # force them to retry
+      print("Connection Error, retry")
+      print(e)
+      time.sleep(1)
   link_data = crawler.process_link_to_csv(response.text)
   header = link_data[0]
   link_data.remove(header)
   link_removed_header = link_data
   dataframes.append(DataFrame(link_removed_header, columns=header))
+  time.sleep(1)
 
 concated = pandas.concat(dataframes)
-# concated.to_pickle("/home/septian/dataframes-harian-bei.pkl")
+concated.to_pickle("/home/septian/dataframes-harian-bei.pkl")
 
 all_ticker = list(concated.ticker.unique())
 
@@ -45,20 +61,20 @@ for ticker in all_ticker:
     (tick_function, target_cross_price) = (util.get_next_tick, util.get_nearest_possible_price(cross_price))
   else:
     (tick_function, target_cross_price) = (util.get_prev_tick, util.get_nearest_possible_price(cross_price, True))
-  
+
   tick_counter = 0
   price_holder = last
 
   while(price_holder != target_cross_price):
     price_holder = tick_function(price_holder)
     tick_counter += 1
-  
+
   cross_type = "Golden Cross" if last < cross_price else "Dead Cross"
   possible = True if (cross_type == "Golden Cross" and cross_price < ara) or (cross_type == "Dead Cross" and cross_price > arb) else False
 
   # if possible:
     # tics.append(tick_counter)
-  
+
   if 5 < tick_counter < 10 and cross_type == "Golden Cross":
     print("""
 Ticker: {0}
